@@ -1,0 +1,21 @@
+[2026-09-05 00:02:03][GENERAL][INFO] Starting YuriLang compiler pipeline.
+[2026-09-05 00:02:03][GENERAL][DEBUG] ./build/yurilang
+[2026-09-05 00:02:03][MODULE][INFO] Automatically loading and binding C++ module: std
+[2026-09-05 00:02:03][MODULE][INFO] Compiling file: examples/main.yuri
+[2026-09-05 00:02:03][LEXER][INFO] Reading source file from disk: examples/main.yuri
+[2026-09-05 00:02:03][LEXER][DEBUG] Successfully read source file contents (1069 bytes)
+[2026-09-05 00:02:03][LEXER][DEBUG] Lexer initialized with source code length: 1069
+[2026-09-05 00:02:03][LEXER][INFO] Starting token scan stream
+[2026-09-05 00:02:03][LEXER][INFO] Successfully completed token scanning. Total tokens: 199
+[2026-09-05 00:02:03][PARSER][INFO] Initialized Parser for file: examples/main.yuri
+[2026-09-05 00:02:03][PARSER][INFO] Starting AST program parse for: examples/main.yuri
+[2026-09-05 00:02:03][PARSER][INFO] Parsed #entry directive targeting function: main
+[2026-09-05 00:02:03][PARSER][DEBUG] Parsing import block
+[2026-09-05 00:02:03][PARSER][DEBUG] Successfully parsed import block with 3 items
+[2026-09-05 00:02:03][PARSER][DEBUG] Parsing function: calculate_physics
+[2026-09-05 00:02:03][PARSER][DEBUG] Successfully parsed function: calculate_physics -> float
+[2026-09-05 00:02:03][PARSER][DEBUG] Parsing function: main
+[2026-09-05 00:02:03][PARSER][DEBUG] Successfully parsed function: main -> void
+[2026-09-05 00:02:03][PARSER][INFO] Successfully finished parsing file: examples/main.yuri
+[2026-09-05 00:02:03][MODULE][INFO] Parsing successful! Processing code generation across 1 module(s).
+[2026-09-05 00:02:03][CODEGEN][INFO] Triggering JIT execution engine...
