@@ -23,13 +23,11 @@ ModuleManager::ModuleManager(std::string root_path) : root_directory(std::move(r
 
                 Logger::log(Subsystem::ModuleManager, LogLevel::Info, "Automatically loading and binding C++ module: " + file_stem);
 
-                // Automatically load the shared library handle
                 void* handle = dlopen(lib_path.c_str(), RTLD_LAZY | RTLD_GLOBAL);
                 if (!handle) {
                     throw std::runtime_error("Failed to load module library: " + std::string(dlerror()));
                 }
 
-                // Automatically register all symbols with their scraped types using the updated auto-generated binder
                 register_auto_symbols([](const char* name, void* ptr, const char* ret_type, const std::vector<std::string>& params) {
                     Registry::register_native_fn(name, ptr, ret_type, params);
                 }, handle);
@@ -71,7 +69,6 @@ std::vector<AST::Program*> ModuleManager::compile_directory(const std::string& d
         throw std::runtime_error("Directory does not exist: " + target_dir);
     }
 
-    // Ensure standard library modules are included first if present
     std::string std_dir = "std";
     if (std::filesystem::exists(std_dir) && std::filesystem::is_directory(std_dir)) {
         for (const auto& entry : std::filesystem::directory_iterator(std_dir)) {
@@ -130,13 +127,11 @@ std::string ModuleManager::find_module_file(const std::string& mod_name) {
     for (const auto& base_path : search_paths) {
         if (!std::filesystem::exists(base_path)) continue;
         
-        // Check direct path first (e.g. std/bitmath.yuri)
         std::string direct_path = base_path + "/" + mod_name + ".yuri";
         if (std::filesystem::exists(direct_path)) {
             return direct_path;
         }
 
-        // Otherwise recursive search
         for (const auto& entry : std::filesystem::recursive_directory_iterator(base_path)) {
             if (entry.is_regular_file() && entry.path().extension() == ".yuri") {
                 if (entry.path().stem().string() == mod_name) {

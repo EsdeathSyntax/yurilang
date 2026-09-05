@@ -232,7 +232,7 @@ std::unique_ptr<AST::Node> Parser::parse_import() {
 }
 
 std::unique_ptr<AST::IfStmt> Parser::parse_if_stmt() {
-    advance(); // consume 'if'
+    advance();
     auto stmt = std::make_unique<AST::IfStmt>();
 
     stmt->condition = parse_expression();
@@ -258,7 +258,7 @@ std::unique_ptr<AST::IfStmt> Parser::parse_if_stmt() {
     }
 
     if (check(TokenType::Identifier) && peek().lexeme == "else") {
-        advance(); // consume 'else'
+        advance();
         
         if (!match(TokenType::OpenBrace)) {
             ErrorReporter::error(peek().line, peek().column, "Expected '{' after else");
@@ -285,7 +285,7 @@ std::unique_ptr<AST::IfStmt> Parser::parse_if_stmt() {
 }
 
 std::unique_ptr<AST::VarDecl> Parser::parse_var_decl() {
-    advance(); // consume 'let'
+    advance();
 
     Token name_tok = advance();
     if (name_tok.type != TokenType::Identifier) {
@@ -523,16 +523,31 @@ std::unique_ptr<AST::Function> Parser::parse_function() {
     return fn;
 }
 
-std::shared_ptr<Type> Parser::parse_type() {
+std::shared_ptr<Yuri::Type> Parser::parse_type() {
     if (!check(TokenType::Identifier)) {
         ErrorReporter::error(peek().line, peek().column, "Expected type identifier");
         return nullptr;
     }
-    advance(); // Consume type name
+    
+    Token type_token = advance();
+    std::string type_name = type_token.lexeme;
+
+    Yuri::TypeKind kind = Yuri::TypeKind::Custom;
+    if (type_name == "void") kind = Yuri::TypeKind::Void;
+    else if (type_name == "i64") kind = Yuri::TypeKind::Int64;
+    else if (type_name == "i32") kind = Yuri::TypeKind::Int32;
+    else if (type_name == "bool") kind = Yuri::TypeKind::Bool;
+    else if (type_name == "f32") kind = Yuri::TypeKind::Float32;
+    else if (type_name == "f64") kind = Yuri::TypeKind::Float64;
+    else if (type_name == "string") kind = Yuri::TypeKind::String;
+
+    auto base_type = Yuri::Type::make(kind, kind == Yuri::TypeKind::Custom ? type_name : "");
+
     if (match(TokenType::Question)) {
-        // Optional/nullable type modifier handled
+        base_type = Yuri::Type::make_array(base_type);
     }
-    return nullptr; // Stub returning shared_ptr<Type> to satisfy method signature requirements
+
+    return base_type;
 }
 
 std::unique_ptr<AST::Expr> Parser::parse_expression() {

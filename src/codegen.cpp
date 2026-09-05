@@ -303,7 +303,6 @@ llvm::Value* CodeGenerator::codegen_expr(AST::Expr* expr) {
         if (alloca) {
             llvm::Type* target_ty = alloca->getAllocatedType();
             if (target_ty->isStructTy()) {
-                // Nullable type assignment: wrap the scalar into { i1 true, base_ty val }
                 llvm::Type* base_ty = target_ty->getStructElementType(1);
                 if (base_ty->isFloatingPointTy() && val->getType()->isIntegerTy()) {
                     val = builder->CreateSIToFP(val, base_ty, "cast_to_fp");
@@ -337,7 +336,6 @@ llvm::Value* CodeGenerator::codegen_expr(AST::Expr* expr) {
         const std::string& op = bin->op;
 
         if ((op == "==" || op == "!=") && (l->getType()->isStructTy() || r->getType()->isStructTy())) {
-            // Extract the i1 presence flag (index 0) from the nullable struct
             if (l->getType()->isStructTy() && isa<llvm::ConstantPointerNull>(r)) {
                 l = builder->CreateExtractValue(l, 0, "null_check_flag");
                 r = builder->getInt1(false);
@@ -422,7 +420,6 @@ llvm::Value* CodeGenerator::codegen_expr(AST::Expr* expr) {
             std::vector<llvm::Value*> args;
             for (const auto& arg : call->arguments) {
                 llvm::Value* arg_val = codegen_expr(arg.get());
-                // If a nullable struct is passed to a regular function/native call expecting a scalar, unwrap it
                 if (arg_val && arg_val->getType()->isStructTy()) {
                     arg_val = builder->CreateExtractValue(arg_val, 1, "arg_unwrapped");
                 }

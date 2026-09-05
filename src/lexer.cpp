@@ -101,7 +101,7 @@ Token Lexer::number() {
     size_t start_col = column;
 
     if (source[start] == '0' && (peek() == 'x' || peek() == 'X')) {
-        advance(); // consume 'x'/'X'
+        advance();
         while (std::isxdigit(peek())) {
             advance();
         }
@@ -110,7 +110,7 @@ Token Lexer::number() {
             advance();
         }
         if (peek() == '.' && std::isdigit(peek_next())) {
-            advance(); // consume '.'
+            advance();
             while (std::isdigit(peek())) {
                 advance();
             }

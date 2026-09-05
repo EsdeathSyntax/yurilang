@@ -22,8 +22,8 @@ enum class TypeKind {
 class Type {
 public:
     TypeKind kind;
-    std::string name; // For custom structs or detailed names
-    std::shared_ptr<Type> inner_type; // For arrays (e.g., Array<float>) or pointers
+    std::string name; 
+    std::shared_ptr<Type> inner_type;
 
     static std::shared_ptr<Type> make(TypeKind k, const std::string& n = "") {
         auto t = std::make_shared<Type>();

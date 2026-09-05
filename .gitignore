@@ -5,3 +5,4 @@ build/
 *.a
 *.so
 .cache/
+yuri_log.txt

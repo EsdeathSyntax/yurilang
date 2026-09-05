@@ -65,7 +65,6 @@ def build():
         rel_dir, file_name = os.path.split(rel_path)
         file_stem = os.path.splitext(file_name)[0]
         
-        # Determine expected C++ namespace based on directory structure + file stem
         parts = []
         if rel_dir:
             parts.extend(rel_dir.split(os.sep))
@@ -108,16 +107,12 @@ def build():
             full_func_name = sig_prefix.split()[-1]
             unqualified_name = full_func_name.split('::')[-1]
             
-            # STRICT NAMESPACE FILTERING: Only register if the function is inside the matching namespace
             if unqualified_name not in file_namespace_map:
                 continue
             
             expected_ns = file_namespace_map[unqualified_name]
-            # Check if the fully qualified name matches the expected namespace prefix
             if not full_func_name.startswith(expected_ns + "::"):
-                continue  # Skip helper functions or functions in other scopes
-
-            # Construct flattened registration name (e.g. math_idiv)
+                continue
             flat_prefix = expected_ns.replace("::", "_")
             registered_name = f"{flat_prefix}_{unqualified_name}"
 
@@ -157,7 +152,8 @@ def main():
         build()
         print("[INFO] Building project with -j4...")
         subprocess.run(["cmake", "--build", "build", "-j4"], check=True)
-
+    elif command == "gitbuild":
+        subprocess.run(["git", "push", "-u", "origin", "main"], check = True)
     else:
         print(f"Unknown argument: '{command}'. Use 'make' or 'build'.")
         sys.exit(1)

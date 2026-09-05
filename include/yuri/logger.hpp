@@ -60,7 +60,6 @@ public:
     static void log(Subsystem sub, LogLevel level, const std::string& message) {
         std::lock_guard<std::mutex> lock(log_mutex);
         
-        // Format timestamp
         auto now = std::chrono::system_clock::now();
         auto in_time_t = std::chrono::system_clock::to_time_t(now);
         
@@ -70,14 +69,12 @@ public:
 
         std::string formatted = "[" + timestamp + "][" + subsystem_to_string(sub) + "][" + level_to_string(level) + "] " + message;
 
-        // Mirror to terminal
         if (level == LogLevel::Error) {
             std::cerr << formatted << "\n";
         } else {
             std::cout << formatted << "\n";
         }
 
-        // Mirror to log file
         std::ofstream file(log_filepath, std::ios::app);
         if (file.is_open()) {
             file << formatted << "\n";
