@@ -17,13 +17,15 @@ Requirements:
  - CMake 3.20 or higher
 
 ## Building
-Clone & Compile using CMake for example:
+Clone & Compile using CMake for example (intended method):
 
 ```
 git clone https://github.com/EsdeathSyntax/yurilang.git
 cd YuriLang
 python3 opts.py build
 ```
+
+Please implement/modify the build function in opts.py for other builders such as clang.
 
 
 ## Compiling a file/directory:
@@ -36,3 +38,6 @@ or
 ```
 
 Distributed under the MIT License. See the LICENSE file for details.
+
+## Extra
+ - [Full documentation](https://esdeath.org/yurilang/documentation)
