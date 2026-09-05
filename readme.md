@@ -19,8 +19,6 @@ Requirements:
 ## Building
 Clone & Compile using CMake for example:
 
-Clone the repository and compile the source tree using CMake:
-
 ```
 git clone https://github.com/EsdeathSyntax/yurilang.git
 cd YuriLang
