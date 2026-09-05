@@ -1,0 +1,5 @@
+@module mod1
+
+public fn doThing(a: int) -> int {
+    return a * 3
+}
