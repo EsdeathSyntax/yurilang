@@ -19,9 +19,6 @@ Requirements:
 ## Building
 Clone & Compile using CMake for example:
 
-Bash
-
-# Building the Project
 Clone the repository and compile the source tree using CMake:
 
 ```
@@ -30,7 +27,8 @@ cd YuriLang
 python3 opts.py build
 ```
 
-Compiling a file/directory:
+
+## Compiling a file/directory:
 ```
 ./build/yurilang examples
 ```
