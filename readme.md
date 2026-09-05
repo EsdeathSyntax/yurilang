@@ -1,1 +1,1 @@
-# YuriLang
+![YuriLang](https://github.com/EsdeathSyntax/yurilang/blob/main/art/yuri.png "Made with love")
