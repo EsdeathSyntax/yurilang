@@ -152,8 +152,6 @@ def main():
         build()
         print("[INFO] Building project with -j4...")
         subprocess.run(["cmake", "--build", "build", "-j4"], check=True)
-    elif command == "gitbuild":
-        subprocess.run(["git", "push", "-u", "origin", "main"], check = True)
     else:
         print(f"Unknown argument: '{command}'. Use 'make' or 'build'.")
         sys.exit(1)
