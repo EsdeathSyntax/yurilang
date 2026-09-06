@@ -6,12 +6,11 @@ YuriLang is a custom LLVM-integrated programming & scripting language written fr
 ## Core Architecture & Features
 
 - **LLVM JIT Engine**: Direct intermediate representation (IR) generation and fast native machine code execution.
-- **Robust Type Checking**: Supports core primitives (`i32`, `i64`, `f32`, `f64`, `bool`, `string`), custom data structures, and native nullable type modifiers (`?`).
-- **Clean Modular Design**: Includes a modular framework for .yuri files, all out of the box.
+- **Robust Type Checking**: Supports core primitives (`int`, `float`, `str`, `bool`, `array`), custom data structures, and nullable type modifiers (`?`).
 
 ## Quick Start
 Requirements:
- - Linux environment with POSIX-compliant socket support
+ - Linux environment (as of 9/6/26)
  - C++23 compliant compiler
  - LLVM development packages
  - CMake 3.20 or higher
