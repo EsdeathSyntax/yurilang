@@ -5,10 +5,13 @@
 #include <vector>
 
 inline void register_auto_symbols(void (*register_fn)(const char*, void*, const char*, const std::vector<std::string>&), void* handle) {
-    register_fn("io_write", dlsym(handle, "_ZN2io5writeEd"), "i64", {"i64"});
     register_fn("io_write", dlsym(handle, "_ZN2io5writeEl"), "i64", {"i64"});
-    register_fn("io_write", dlsym(handle, "_ZN2io5writeEPKc"), "i64", {"i64"});
-    register_fn("io_write", dlsym(handle, "_ZN2io5writeEPv"), "i64", {"i64"});
+    register_fn("http_requestasync", dlsym(handle, "_ZN4http12requestasyncEPKcS1_S1_"), "i64", {"i64", "i64", "i64"});
+    register_fn("http_get", dlsym(handle, "_ZN4http3getEPKc"), "i64", {"i64"});
+    register_fn("http_post", dlsym(handle, "_ZN4http4postEPKcS1_"), "i64", {"i64", "i64"});
+    register_fn("http_await", dlsym(handle, "_ZN4http5awaitEl"), "i64", {"i64"});
+    register_fn("http_getasync", dlsym(handle, "_ZN4http8getasyncEPKc"), "i64", {"i64"});
+    register_fn("http_postasync", dlsym(handle, "_ZN4http9postasyncEPKcS1_"), "i64", {"i64", "i64"});
     register_fn("math_idiv", dlsym(handle, "_ZN4math4idivEll"), "i64", {"i64", "i64"});
     register_fn("math_sqrt", dlsym(handle, "_ZN4math4sqrtEf"), "f32", {"f32"});
     register_fn("bitutil_bitcast_to_int", dlsym(handle, "_ZN7bitutil14bitcast_to_intEd"), "i64", {"f64"});

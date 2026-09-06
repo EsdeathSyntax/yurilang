@@ -19,7 +19,7 @@ enum class TokenType {
     Newline, Dot, Comma, Hash, Slash, Percent, Star, Minus,
     MinusEquals, StarEquals, SlashEquals, PercentEquals,
     At, BitAnd, BitOr, BitXor, BitshiftL, BitshiftR,
-    BitNot, BitCastKw, Less, Greater, OpenBracket, CloseBracket,
+    BitNot, Less, Greater, OpenBracket, CloseBracket,
     LessEqual, GreaterEqual, DotDot, NotEqual, Question, Match,
 
     EndOfFile, Unknown

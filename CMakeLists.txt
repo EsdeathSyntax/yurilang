@@ -3,6 +3,8 @@ project(YuriLang C CXX) # <-- FIX 1: Enable both C and CXX to satisfy LLVM's int
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_VISIBILITY_PRESET default)
+set(CMAKE_VISIBILITY_INLINES_HIDDEN OFF)
 
 # Find dependency packages required by LLVM exports
 find_package(Terminfo QUIET) # <-- FIX 2: Explicitly find Terminfo so LLVMSupport links correctly

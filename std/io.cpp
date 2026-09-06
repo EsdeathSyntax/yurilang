@@ -2,7 +2,6 @@
 #include <cstdint>
 #include <string>
 #include <cstring>
-#include <unordered_map>
 
 struct ArrayHeader {
     uint64_t capacity;
@@ -17,11 +16,51 @@ struct TableEntry {
 
 struct TableHeader {
     uint64_t count;
+    uint64_t capacity;
     TableEntry entries[1];
+};
+
+enum class ValueType : uint8_t {
+    Int = 1,
+    Float = 2,
+    Bool = 3,
+    String = 4,
+    Array = 5,
+    Table = 6,
+    Nil = 7
 };
 
 namespace io {
     namespace {
+        void print_value_tagged(uint64_t bits, ValueType type);
+
+        void print_array(ArrayHeader* arr) {
+            if (!arr) {
+                std::cout << "[]";
+                return;
+            }
+            std::cout << "[";
+            for (uint64_t i = 0; i < arr->length; ++i) {
+                print_value_tagged(arr->data[i], ValueType::Int); 
+                if (i + 1 < arr->length) std::cout << ", ";
+            }
+            std::cout << "]";
+        }
+
+        void print_table(TableHeader* tbl) {
+            if (!tbl) {
+                std::cout << "{}";
+                return;
+            }
+            std::cout << "{";
+            for (uint64_t i = 0; i < tbl->count; ++i) {
+                std::cout << "\"" << tbl->entries[i].key_hash << "\": ";
+                print_value_tagged(tbl->entries[i].val_bits, ValueType::Int);
+                if (i + 1 < tbl->count) std::cout << ", ";
+            }
+            std::cout << "}";
+        }
+
         bool is_likely_string(uint64_t bits) {
             if (bits < 0x10000) return false;
             char* ptr = reinterpret_cast<char*>(bits);
@@ -32,72 +71,56 @@ namespace io {
             return false;
         }
 
-        bool is_likely_array_or_table(uint64_t bits) {
-            if (bits < 0x10000) return false;
-            uint64_t* ptr = reinterpret_cast<uint64_t*>(bits);
-            return ptr[0] < 100000 && ptr[1] < 100000;
-        }
-
-        void yuri_print_val(uint64_t bits, bool is_float_hint = false) {
-            if (is_float_hint) {
-                double dval;
-                std::memcpy(&dval, &bits, 8);
-                std::cout << dval;
-                return;
-            }
-            if (is_likely_string(bits)) {
-                std::cout << "\"" << reinterpret_cast<char*>(bits) << "\"";
-                return;
-            }
-            if (is_likely_array_or_table(bits)) {
-                auto* arr = reinterpret_cast<ArrayHeader*>(bits);
-                std::cout << "[";
-                for (uint64_t i = 0; i < arr->length; ++i) {
-                    yuri_print_val(arr->data[i]);
-                    if (i + 1 < arr->length) std::cout << ", ";
+        void print_value_tagged(uint64_t bits, ValueType type) {
+            switch (type) {
+                case ValueType::Int:
+                    std::cout << static_cast<int64_t>(bits);
+                    break;
+                case ValueType::Float: {
+                    double dval;
+                    std::memcpy(&dval, &bits, 8);
+                    std::cout << dval;
+                    break;
                 }
-                std::cout << "]";
-                return;
+                case ValueType::Bool:
+                    std::cout << (bits ? "true" : "false");
+                    break;
+                case ValueType::String:
+                    std::cout << "\"" << reinterpret_cast<char*>(bits) << "\"";
+                    break;
+                case ValueType::Array:
+                    print_array(reinterpret_cast<ArrayHeader*>(bits));
+                    break;
+                case ValueType::Table:
+                    print_table(reinterpret_cast<TableHeader*>(bits));
+                    break;
+                case ValueType::Nil:
+                    std::cout << "null";
+                    break;
+                default:
+                    std::cout << "null";
+                    break;
             }
-
-            std::cout << static_cast<int64_t>(bits);
         }
     }
 
-    void write(const char* str) {
-        if (str) {
-            std::cout << str << "\n";
-        } else {
-            std::cout << "null\n";
-        }
-    }
-
+    // Single unified write function for all types and payloads
     void write(int64_t bits) {
-        yuri_print_val(static_cast<uint64_t>(bits));
+        // Safe automatic heuristic fallback if untagged bits are passed
+        if (is_likely_string(bits)) {
+            print_value_tagged(bits, ValueType::String);
+        } else if (bits >= 0x10000 && (bits % alignof(int64_t) == 0)) {
+            auto* arr = reinterpret_cast<ArrayHeader*>(bits);
+            if (arr->length < 10000000 && arr->capacity >= arr->length) {
+                print_value_tagged(bits, ValueType::Array);
+            } else {
+                print_value_tagged(bits, ValueType::Int);
+            }
+        } else {
+            print_value_tagged(bits, ValueType::Int);
+        }
         std::cout << "\n";
     }
 
-    void write(double val) {
-        uint64_t bits;
-        std::memcpy(&bits, &val, 8);
-        yuri_print_val(bits, true);
-        std::cout << "\n";
-    }
 
-    void write(void* ptr) {
-        yuri_print_val(reinterpret_cast<uint64_t>(ptr));
-        std::cout << "\n";
-    }
-
-    extern "C" char* yuri_str_concat(const char* a, const char* b) {
-        if (!a) a = "";
-        if (!b) b = "";
-        size_t len_a = std::strlen(a);
-        size_t len_b = std::strlen(b);
-        char* res = static_cast<char*>(std::malloc(len_a + len_b + 1));
-        std::memcpy(res, a, len_a);
-        std::memcpy(res + len_a, b, len_b);
-        res[len_a + len_b] = '\0';
-        return res;
-    }
 }

@@ -18,6 +18,10 @@ private:
 
 public:
     static void register_native_fn(const std::string& name, void* ptr, const std::string& ret, const std::vector<std::string>& params) {
+        if (!ptr) {
+        Logger::log(Subsystem::Runtime, LogLevel::Warning, "Skipping registration for '" + name + "': resolved symbol pointer is null.");
+        return;
+    }
         native_functions[name] = {ptr, ret, params};
     }
 

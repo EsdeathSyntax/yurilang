@@ -689,32 +689,6 @@ std::unique_ptr<AST::Expr> Parser::parse_primary() {
             expr = std::move(l_expr);
         }
     }
-    else if (match(TokenType::BitCastKw)) {
-        if (!match(TokenType::OpenParen)) {
-            Logger::log(Subsystem::Parser, LogLevel::Error, "Expected '(' after bitcast");
-            ErrorReporter::error(peek().line, peek().column, "Expected '(' after bitcast");
-        }
-        
-        auto expr_to_cast = parse_expression();
-        
-        if (!match(TokenType::Comma)) {
-            Logger::log(Subsystem::Parser, LogLevel::Error, "Expected ',' in bitcast");
-            ErrorReporter::error(peek().line, peek().column, "Expected ',' in bitcast");
-        }
-        
-        auto target_expr = parse_expression();
-
-        if (!match(TokenType::CloseParen)) {
-            Logger::log(Subsystem::Parser, LogLevel::Error, "Expected ')' after bitcast arguments");
-            ErrorReporter::error(peek().line, peek().column, "Expected ')' after bitcast arguments");
-        }
-        
-        auto bitcast_expr = std::make_unique<AST::BitCastExpr>();
-        bitcast_expr->left = std::move(expr_to_cast);
-        bitcast_expr->op = "bitcast";
-        bitcast_expr->right = std::move(target_expr);
-        expr = std::move(bitcast_expr);
-    }
     else if (check(TokenType::Identifier) && peek().lexeme == "nullptr") {
         advance();
         expr = std::make_unique<AST::NullPtrExpr>();

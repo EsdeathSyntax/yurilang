@@ -39,5 +39,6 @@ or
 
 Distributed under the MIT License. See the LICENSE file for details.
 
-## Extra
+## Notes/Disclaimers/Links
  - [Full documentation](https://esdeath.org/yurilang/documentation)
+ - Generative AI was involved in this project.

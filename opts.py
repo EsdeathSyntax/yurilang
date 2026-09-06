@@ -51,9 +51,9 @@ def build():
         print("[Build] No C++ standard modules found.")
         return
 
-    build_std_dir = os.path.join(script_dir, "build", "std")
-    os.makedirs(build_std_dir, exist_ok=True)
-    so_file = os.path.join(build_std_dir, "std.so")
+    std_dir = os.path.join(script_dir, "std")
+    os.makedirs(std_dir, exist_ok=True)
+    so_file = os.path.join(std_dir, "std.so")
 
     print(f"[Build] Compiling standard library files recursively into {so_file}...")
 
@@ -120,7 +120,7 @@ def build():
             ret_type_mapped = cpp_type_to_yuri(raw_ret)
             mapped_params = [f'"{cpp_type_to_yuri(p)}"' for p in raw_params]
 
-            print(f"name: {registered_name} | namespace: {expected_ns}")
+            print(f"name: {registered_name} | namespace: {expected_ns} | mangled: {mangled_name}")
 
             params_list_code = "{" + ", ".join(mapped_params) + "}"
             registry_code += f'    register_fn("{registered_name}", dlsym(handle, "{mangled_name}"), "{ret_type_mapped}", {params_list_code});\n'

@@ -1,10 +1,10 @@
-
 #entry main
 
 @import (
     [bitutil, math, io] from std
 )
 
+// comment example
 
 public fn calculate_physics(t: float) -> float {
     let velocity := t * 9.81 + 15.4;
@@ -27,7 +27,7 @@ public fn main(x: float?) -> void {
     io.write(physics_config)
 
     let base_offset := 42;
-    let computed_val := (base_offset * 2) + bitutil.bitcast_to_int(x, 1) - math.idiv(100, 4);
+    let computed_val := (base_offset * 2) + bitutil.bitcast_to_int(x) - math.idiv(100, 4);
     
     let final_result := calculate_physics(3.14) * 2.0;
     io.write(final_result)
