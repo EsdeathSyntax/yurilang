@@ -3,9 +3,8 @@
 
 YuriLang is a custom LLVM-integrated programming & scripting language written from scratch in C++ designed for raw performance and efficiency.
 
-## Core Architecture & Features
+## Features
 
-- **LLVM JIT Engine**: Direct intermediate representation (IR) generation and fast native machine code execution.
 - **Robust Type Checking**: Supports core primitives (`int`, `float`, `str`, `bool`, `array`), custom data structures, and nullable type modifiers (`?`).
 
 ## Quick Start
