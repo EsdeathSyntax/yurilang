@@ -77,7 +77,7 @@ def build():
         for func_name in file_sigs.keys():
             file_namespace_map[func_name] = expected_ns
 
-    cmd = ["g++", "-shared", "-fPIC", "-O3"] + cpp_files + ["-o", so_file]
+    cmd = ["g++", "-std=c++23", "-shared", "-fPIC", "-O3", "-march=native", "-ffast-math", "-fno-math-errno"] + cpp_files + ["-o", so_file]
     subprocess.run(cmd, check=True)
 
     nm_result = subprocess.run(["nm", "-D", "--defined-only", so_file], capture_output=True, text=True)

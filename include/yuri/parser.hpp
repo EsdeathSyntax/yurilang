@@ -37,6 +37,10 @@ private:
     std::unique_ptr<AST::Expr> parse_bitwise();
     std::unique_ptr<AST::Expr> parse_factor();
     std::unique_ptr<AST::Expr> parse_primary();
+    std::unique_ptr<AST::WhileStmt> parse_while_stmt();
+    std::unique_ptr<AST::Stmt> parse_for_stmt();
+    std::unique_ptr<AST::Expr> parse_type_definition();
+    std::string parse_type_string();
 
     std::vector<Token> tokens;
     size_t current = 0;

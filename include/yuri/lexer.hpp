@@ -10,7 +10,7 @@ enum class TokenType {
     KeywordFn, KeywordInit, KeywordSelf, KeywordOperator,
     KeywordPrintln, KeywordString, StringLiteral,
     KeywordReturn, KeywordIf, KeywordElse, KeywordWhile,
-    KeywordModule, KeywordLet,
+    KeywordModule, KeywordLet, KeywordType,
 
     Identifier, Number,
 

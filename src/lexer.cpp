@@ -140,6 +140,7 @@ Token Lexer::identifier() {
     else if (text == "string") type = TokenType::KeywordString;
     else if (text == "return") type = TokenType::KeywordReturn;
     else if (text == "module") type = TokenType::KeywordModule;
+    else if (text == "type") type = TokenType::KeywordType;
 
     return Token{type, text, start_line, start_col};
 }

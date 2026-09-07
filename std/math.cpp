@@ -1,16 +1,19 @@
 #include <cmath>
 #include <stdexcept>
 #include <cstdint>
+#include <xmmintrin.h>
+#include <immintrin.h>
+#include <bit>
 
 namespace math {
     int64_t idiv(int64_t a, int64_t b) {
-        if (a == 0 || b == 0) {
-            throw std::runtime_error("Attempted to divide with zero.");
+        if (b == 0) {
+            throw std::runtime_error("Attempted to divide by zero.");
         }
         return a / b;
     }
     
-    float sqrt(float x) {
-        return std::sqrt(x);
+    double sqrt(double val) {
+        return std::sqrt(val);
     }
 }

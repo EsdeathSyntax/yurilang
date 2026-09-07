@@ -17,8 +17,11 @@ private:
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::IRBuilder<>> builder;
+    std::vector<llvm::BasicBlock*> loop_exit_stack;
     
     std::unordered_map<std::string, llvm::Value*> named_values;
+    std::unordered_map<std::string, std::string> type_aliases;
+    std::unordered_map<std::string, std::vector<std::pair<std::string, std::string>>> struct_definitions;
 
     std::string target_entry_function = "main";
     size_t entry_param_count = 0;

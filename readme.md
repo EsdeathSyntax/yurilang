@@ -1,18 +1,18 @@
 # YuriLang
 ![YuriLang](https://github.com/EsdeathSyntax/yurilang/blob/main/art/yuri.png "Made with love")
 
-YuriLang is a custom LLVM-integrated programming & scripting language written from scratch in C++ designed for raw performance and efficiency.
+YuriLang is a custom LLVM-backend programming & scripting language written from scratch in C++ designed for raw performance and efficiency.
 
 ## Features
 
-- **Robust Type Checking**: Supports core primitives (`int`, `float`, `str`, `bool`, `array`), custom data structures, and nullable type modifiers (`?`).
+- **Dynamically Typed**: Supports standard primitives (`int`, `float`, `str`, `bool`, `array`), custom data structures, and nullable type modifiers (`?`); you can also go with no types.
 
 ## Quick Start
 Requirements:
  - Linux environment (as of 9/6/26)
- - C++23 compliant compiler
+ - C++23 compiler
  - LLVM development packages
- - CMake 3.20 or higher
+ - CMake, preferably latest version
 
 ## Building
 Clone & Compile using CMake for example (intended method):
@@ -35,8 +35,8 @@ or
 ./build/yurilang main.yuri
 ```
 
-Distributed under the MIT License. See the LICENSE file for details.
+Distributed under the MIT License.
 
 ## Notes/Disclaimers/Links
- - [Full documentation](https://esdeath.org/yurilang/documentation)
+ - Full documentation to be added
  - Generative AI was involved in this project.

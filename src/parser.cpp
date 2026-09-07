@@ -336,6 +336,111 @@ std::unique_ptr<AST::VarDecl> Parser::parse_var_decl() {
     return decl;
 }
 
+std::unique_ptr<AST::WhileStmt> Parser::parse_while_stmt() {
+    advance();
+    auto stmt = std::make_unique<AST::WhileStmt>();
+    stmt->condition = parse_expression();
+
+    if (!match(TokenType::OpenBrace)) {
+        ErrorReporter::error(peek().line, peek().column, "Expected '{' after while condition");
+        return nullptr;
+    }
+
+    while (match(TokenType::Newline)) {}
+
+    while (!check(TokenType::CloseBrace) && !is_at_end()) {
+        if (match(TokenType::Semicolon) || match(TokenType::Newline)) continue;
+        if (auto stmt_node = parse_declaration()) {
+            stmt->body.push_back(std::move(stmt_node));
+        } else {
+            advance();
+        }
+    }
+
+    if (!match(TokenType::CloseBrace)) {
+        ErrorReporter::error(peek().line, peek().column, "Expected '}' to close while block");
+    }
+
+    return stmt;
+}
+
+std::unique_ptr<AST::Stmt> Parser::parse_for_stmt() {
+    advance();
+
+    Token name_tok = advance();
+    if (name_tok.type != TokenType::Identifier) {
+        Logger::log(Subsystem::Parser, LogLevel::Error, "Expected loop variable identifier after 'for'");
+        ErrorReporter::error(name_tok.line, name_tok.column, "Expected loop variable identifier after 'for'");
+        return nullptr;
+    }
+    std::string var_name = name_tok.lexeme;
+
+    if (check(TokenType::Equals) || peek().lexeme == "=") {
+        if (peek().lexeme == "=") advance();
+        
+        auto stmt = std::make_unique<AST::ForNumericStmt>();
+        stmt->var_name = var_name;
+        stmt->start = parse_expression();
+
+        if (!match(TokenType::Comma) && peek().lexeme != ",") {
+            ErrorReporter::error(peek().line, peek().column, "Expected ',' after numeric loop start value");
+            return nullptr;
+        }
+        if (peek().lexeme == ",") advance();
+
+        stmt->end = parse_expression();
+
+        if (match(TokenType::Comma) || peek().lexeme == ",") {
+            if (peek().lexeme == ",") advance();
+            stmt->step = parse_expression();
+        }
+
+        if (!match(TokenType::OpenBrace)) {
+            ErrorReporter::error(peek().line, peek().column, "Expected '{' after numeric for declaration");
+            return nullptr;
+        }
+
+        while (match(TokenType::Newline)) {}
+        while (!check(TokenType::CloseBrace) && !is_at_end()) {
+            if (match(TokenType::Semicolon) || match(TokenType::Newline)) continue;
+            if (auto node = parse_declaration()) {
+                stmt->body.push_back(std::move(node));
+            } else {
+                advance();
+            }
+        }
+        match(TokenType::CloseBrace);
+        return stmt;
+    } 
+    else if (check(TokenType::Identifier) && peek().lexeme == "in") {
+        advance();
+
+        auto stmt = std::make_unique<AST::ForInStmt>();
+        stmt->var_name = var_name;
+        stmt->iterable = parse_expression();
+
+        if (!match(TokenType::OpenBrace)) {
+            ErrorReporter::error(peek().line, peek().column, "Expected '{' after iterator for declaration");
+            return nullptr;
+        }
+
+        while (match(TokenType::Newline)) {}
+        while (!check(TokenType::CloseBrace) && !is_at_end()) {
+            if (match(TokenType::Semicolon) || match(TokenType::Newline)) continue;
+            if (auto node = parse_declaration()) {
+                stmt->body.push_back(std::move(node));
+            } else {
+                advance();
+            }
+        }
+        match(TokenType::CloseBrace);
+        return stmt;
+    }
+
+    ErrorReporter::error(name_tok.line, name_tok.column, "Expected '=' or 'in' in for loop declaration");
+    return nullptr;
+}
+
 std::unique_ptr<AST::Node> Parser::parse_declaration() {
     if (check(TokenType::At)) {
         if (current + 1 < tokens.size() && tokens[current + 1].lexeme == "import") {
@@ -343,8 +448,25 @@ std::unique_ptr<AST::Node> Parser::parse_declaration() {
         }
     }
 
+    
+
     if (check(TokenType::Identifier) && peek().lexeme == "if") {
         return parse_if_stmt();
+    }
+
+    if (check(TokenType::Identifier) && peek().lexeme == "for") {
+        return parse_for_stmt();
+    }
+
+    if (check(TokenType::Identifier) && peek().lexeme == "while") {
+        return parse_while_stmt();
+    }
+
+    if (check(TokenType::Identifier) && peek().lexeme == "break") {
+        advance();
+        match(TokenType::Semicolon);
+        match(TokenType::Newline);
+        return std::make_unique<AST::BreakStmt>();
     }
 
     if (match(TokenType::KeywordNamespace)) return parse_namespace();
@@ -365,18 +487,49 @@ std::unique_ptr<AST::Node> Parser::parse_declaration() {
         return parse_var_decl();
     }
 
-    if (check(TokenType::Identifier) && (current + 1 < tokens.size()) && tokens[current + 1].type == TokenType::Equals) {
-        std::string var_name = advance().lexeme;
-        advance(); 
-        
-        auto expr = parse_expression();
-        match(TokenType::Semicolon);
-        match(TokenType::Newline);
+    bool is_identifier = check(TokenType::Identifier);
+    bool has_next = (current + 1 < tokens.size());
+    
+    if (is_identifier && has_next) {
+        TokenType next_type = tokens[current + 1].type;
+        bool is_assign = (next_type == TokenType::Equals);
+        bool is_compound = (next_type == TokenType::PlusEquals || 
+                            next_type == TokenType::MinusEquals || 
+                            next_type == TokenType::StarEquals || 
+                            next_type == TokenType::SlashEquals);
 
-        auto assign = std::make_unique<AST::AssignExpr>();
-        assign->name = var_name;
-        assign->value = std::move(expr);
-        return assign;
+        if (is_assign || is_compound) {
+            std::string var_name = advance().lexeme;
+            Token op_tok = advance();
+            
+            auto rhs_expr = parse_expression();
+            match(TokenType::Semicolon);
+            match(TokenType::Newline);
+
+            std::unique_ptr<AST::Expr> final_val = std::move(rhs_expr);
+
+            if (is_compound) {
+                std::string bin_op;
+                if (op_tok.lexeme == "+=") bin_op = "+";
+                else if (op_tok.lexeme == "-=") bin_op = "-";
+                else if (op_tok.lexeme == "*=") bin_op = "*";
+                else if (op_tok.lexeme == "/=") bin_op = "/";
+
+                auto bin_expr = std::make_unique<AST::BinaryExpr>();
+                auto var_expr = std::make_unique<AST::VariableExpr>();
+                var_expr->name = var_name;
+                
+                bin_expr->left = std::move(var_expr);
+                bin_expr->op = bin_op;
+                bin_expr->right = std::move(final_val);
+                final_val = std::move(bin_expr);
+            }
+
+            auto assign = std::make_unique<AST::AssignExpr>();
+            assign->name = var_name;
+            assign->value = std::move(final_val);
+            return assign;
+        }
     }
 
     auto expr = parse_expression();
@@ -523,6 +676,104 @@ std::unique_ptr<AST::Function> Parser::parse_function() {
     return fn;
 }
 
+std::string Parser::parse_type_string() {
+    while (match(TokenType::Newline)) {}
+    if (!check(TokenType::Identifier)) {
+        ErrorReporter::error(peek().line, peek().column, "Expected type name identifier");
+        return "auto";
+    }
+    std::string type_str = advance().lexeme;
+    
+    // Support pointers, arrays, or nullables if needed
+    if (match(TokenType::Question)) {
+        type_str += "?";
+    } else if (match(TokenType::Star)) {
+        type_str += "*";
+    } else if (match(TokenType::OpenBracket)) {
+        if (!match(TokenType::CloseBracket)) {
+            ErrorReporter::error(peek().line, peek().column, "Expected ']' to close array type");
+        }
+        type_str += "[]";
+    }
+    return type_str;
+}
+
+std::unique_ptr<AST::Expr> Parser::parse_type_definition() {
+    advance();
+
+    while (match(TokenType::Newline)) {}
+    Token name_tok = advance();
+    if (name_tok.type != TokenType::Identifier) {
+        Logger::log(Subsystem::Parser, LogLevel::Error, "Expected type name identifier after 'type'");
+        ErrorReporter::error(name_tok.line, name_tok.column, "Expected type name identifier after 'type'");
+        return nullptr;
+    }
+    std::string type_name = name_tok.lexeme;
+
+    while (match(TokenType::Newline)) {}
+    if (!match(TokenType::Equals) && peek().lexeme != "=") {
+        Logger::log(Subsystem::Parser, LogLevel::Error, "Expected '=' in type definition for " + type_name);
+        ErrorReporter::error(peek().line, peek().column, "Expected '=' in type definition");
+        return nullptr;
+    }
+    if (peek().lexeme == "=") advance();
+
+    while (match(TokenType::Newline)) {}
+
+    if (match(TokenType::OpenBrace) || peek().lexeme == "{") {
+        if (peek().lexeme == "{") advance();
+        
+        auto struct_decl = std::make_unique<AST::StructTypeDecl>();
+        struct_decl->name = type_name;
+
+        while (match(TokenType::Newline)) {}
+        while (!check(TokenType::CloseBrace) && !is_at_end()) {
+            if (match(TokenType::Semicolon) || match(TokenType::Newline)) continue;
+
+            Token field_tok = advance();
+            if (field_tok.type != TokenType::Identifier) {
+                Logger::log(Subsystem::Parser, LogLevel::Error, "Expected field name identifier in struct type definition");
+                ErrorReporter::error(field_tok.line, field_tok.column, "Expected field name identifier");
+                break;
+            }
+            std::string field_name = field_tok.lexeme;
+
+            while (match(TokenType::Newline)) {}
+            if (!match(TokenType::Colon) && peek().lexeme != ":") {
+                Logger::log(Subsystem::Parser, LogLevel::Error, "Expected ':' after field name in struct type definition");
+                ErrorReporter::error(peek().line, peek().column, "Expected ':' after field name");
+            }
+            if (peek().lexeme == ":") advance();
+
+            std::string field_type = parse_type_string();
+            struct_decl->fields.push_back({field_name, field_type});
+
+            match(TokenType::Comma);
+            match(TokenType::Semicolon);
+            while (match(TokenType::Newline)) {}
+        }
+
+        if (!match(TokenType::CloseBrace) && peek().lexeme != "}") {
+            ErrorReporter::error(peek().line, peek().column, "Expected '}' to close struct type definition");
+        }
+        if (peek().lexeme == "}") advance();
+
+        match(TokenType::Semicolon);
+        match(TokenType::Newline);
+        return struct_decl;
+    } 
+    else {
+        auto alias_decl = std::make_unique<AST::TypeAliasDecl>();
+        alias_decl->name = type_name;
+        alias_decl->target_type = parse_type_string();
+
+        match(TokenType::Semicolon);
+        match(TokenType::Newline);
+        return alias_decl;
+    }
+}
+
+
 std::shared_ptr<Yuri::Type> Parser::parse_type() {
     if (!check(TokenType::Identifier)) {
         ErrorReporter::error(peek().line, peek().column, "Expected type identifier");
@@ -539,7 +790,7 @@ std::shared_ptr<Yuri::Type> Parser::parse_type() {
     else if (type_name == "bool") kind = Yuri::TypeKind::Bool;
     else if (type_name == "f32") kind = Yuri::TypeKind::Float32;
     else if (type_name == "f64") kind = Yuri::TypeKind::Float64;
-    else if (type_name == "string") kind = Yuri::TypeKind::String;
+    else if (type_name == "str") kind = Yuri::TypeKind::String;
 
     auto base_type = Yuri::Type::make(kind, kind == Yuri::TypeKind::Custom ? type_name : "");
 
@@ -629,6 +880,11 @@ std::unique_ptr<AST::Expr> Parser::parse_factor() {
 std::unique_ptr<AST::Expr> Parser::parse_primary() {
     std::unique_ptr<AST::Expr> expr = nullptr;
 
+    bool is_type_decl = check(TokenType::KeywordType) || (check(TokenType::Identifier) && peek().lexeme == "type");
+    if (is_type_decl) {
+        return parse_type_definition();
+    }
+
     if (match(TokenType::OpenBracket)) {
         auto arr_expr = std::make_unique<AST::ArrayLiteralExpr>();
         if (!check(TokenType::CloseBracket)) {
@@ -692,6 +948,18 @@ std::unique_ptr<AST::Expr> Parser::parse_primary() {
     else if (check(TokenType::Identifier) && peek().lexeme == "nullptr") {
         advance();
         expr = std::make_unique<AST::NullPtrExpr>();
+    }
+    else if (check(TokenType::Identifier) && peek().lexeme == "true") {
+        advance();
+        auto b_expr = std::make_unique<AST::BoolLiteralExpr>();
+        b_expr->value = true;
+        expr = std::move(b_expr);
+    }
+    else if (check(TokenType::Identifier) && peek().lexeme == "false") {
+        advance();
+        auto b_expr = std::make_unique<AST::BoolLiteralExpr>();
+        b_expr->value = false;
+        expr = std::move(b_expr);
     }
     else if (check(TokenType::Identifier)) {
         Token id_token = advance();

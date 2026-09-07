@@ -1,25 +1,25 @@
-@import (
-    bitutil from std
-)
-
 #entry main
 
-public fn fast_sqrt(x: float) -> float {
-    let xhalf: float = x * 0.5
-    let i: int = bitutil.bitcast_to_int(x)
+@import (
+    [os, thread, math, io] from std
+)
 
-    i = 0x5fe6ec65457f5639 - (i >> 1)
+public fn main() -> void {
+    let start_time := os.time()
+    let end_time := start_time + 1000
+    let count := 0
     
-    let y: float = bitutil.bitcast_to_float(i)
+    while true {
+        let i := 0
+        while i < 10000 {
+            let val := math.sqrt(2.0)
+            count += 1
+            i += 1
+        }
+        if os.time() >= end_time {
+            break
+        }
+    }
     
-    y = y * (1.5 - (xhalf * y * y))
-    y = y * (1.5 - (xhalf * y * y))
-    
-    return x * y
-}
-
-public fn main(x: float) -> void {
-
-    println(x)
-    println(fast_sqrt(x))
+    io.write(count)
 }

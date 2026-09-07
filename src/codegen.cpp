@@ -29,8 +29,7 @@
 #include "llvm/Linker/Linker.h"
 #include "llvm/Support/Error.h"
 
-// Robust signal handler with traceback integration
-void yuri_sigsegv_handler(int sig, siginfo_t* info, void* context) {
+void sigsegv_handler(int sig, siginfo_t* info, void* context) {
     std::cerr << "\n[CRITICAL ERROR] Segmentation fault (SIGSEGV) intercepted by runtime.\n";
     std::cerr << "Faulting memory address: " << info->si_addr << "\n";
 
@@ -91,18 +90,18 @@ llvm::Function* CodeGenerator::get_or_resolve_function(AST::CallExpr* call, cons
     std::vector<llvm::Type*> param_types;
     llvm::Type* ret_type = builder->getInt64Ty();
 
-    if (auto* sig = Yuri::Registry::get_native_sig(symbol_name)) {
+    auto* sig = Yuri::Registry::get_native_sig(symbol_name);
+    if (!sig && call->module.empty()) {
+        sig = Yuri::Registry::get_native_sig(call->method);
+    }
+
+    if (sig) {
         ret_type = get_llvm_type(sig->ret_type);
         for (const auto& p_str : sig->param_types) {
             param_types.push_back(get_llvm_type(p_str));
         }
     } else {
-        for (auto* arg : args) {
-            param_types.push_back(arg->getType());
-        }
-        if (!args.empty()) {
-            ret_type = args[0]->getType();
-        }
+        throw std::runtime_error("Critical Error: Missing native function signature in Registry for symbol: " + symbol_name);
     }
 
     auto* fn_type = llvm::FunctionType::get(ret_type, param_types, false);
@@ -178,6 +177,10 @@ llvm::Value* CodeGenerator::codegen_expr(AST::Expr* expr) {
         return llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
     }
 
+    if (auto bool_lit = dynamic_cast<AST::BoolLiteralExpr*>(expr)) {
+        return llvm::ConstantInt::get(builder->getInt1Ty(), bool_lit->value ? 1 : 0);
+    }
+    
     if (auto arr_lit = dynamic_cast<AST::ArrayLiteralExpr*>(expr)) {
         size_t count = arr_lit->elements.size();
         std::vector<llvm::Value*> evaluated_elements;
@@ -185,19 +188,22 @@ llvm::Value* CodeGenerator::codegen_expr(AST::Expr* expr) {
             evaluated_elements.push_back(codegen_expr(arr_lit->elements[i].get()));
         }
 
-        size_t alloc_bytes = 16 + (count * 8);
+        size_t alloc_bytes = 24 + (count * 8);
         auto* void_ptr_ty = llvm::PointerType::get(*context, 0);
         llvm::FunctionType* malloc_type = llvm::FunctionType::get(void_ptr_ty, {builder->getInt64Ty()}, false);
         llvm::Function* malloc_fn = llvm::cast<llvm::Function>(module->getOrInsertFunction("malloc", malloc_type).getCallee());
         llvm::Value* raw_mem = builder->CreateCall(malloc_fn, {builder->getInt64(alloc_bytes)}, "arr_mem");
 
-        llvm::Value* cap_ptr = builder->CreatePointerCast(raw_mem, builder->getInt64Ty()->getPointerTo());
+        llvm::Value* tag_ptr = builder->CreatePointerCast(raw_mem, builder->getInt64Ty()->getPointerTo());
+        builder->CreateStore(builder->getInt64(1), tag_ptr);
+    
+        llvm::Value* cap_ptr = builder->CreateConstGEP1_64(builder->getInt64Ty(), tag_ptr, 1);
         builder->CreateStore(builder->getInt64(count), cap_ptr);
         
-        llvm::Value* len_ptr = builder->CreateConstGEP1_64(builder->getInt64Ty(), cap_ptr, 1);
+        llvm::Value* len_ptr = builder->CreateConstGEP1_64(builder->getInt64Ty(), tag_ptr, 2);
         builder->CreateStore(builder->getInt64(count), len_ptr);
 
-        llvm::Value* data_base = builder->CreateConstGEP1_64(builder->getInt64Ty(), cap_ptr, 2);
+        llvm::Value* data_base = builder->CreateConstGEP1_64(builder->getInt64Ty(), tag_ptr, 3);
         for (size_t i = 0; i < count; ++i) {
             llvm::Value* val = evaluated_elements[i];
             llvm::Value* val_bits = val->getType()->isFloatingPointTy() ? builder->CreateBitCast(val, builder->getInt64Ty())
@@ -215,19 +221,22 @@ llvm::Value* CodeGenerator::codegen_expr(AST::Expr* expr) {
 
     if (auto tbl_lit = dynamic_cast<AST::TableLiteralExpr*>(expr)) {
         size_t count = tbl_lit->entries.size();
-        size_t alloc_size = 8 + (count * 16);
+        size_t alloc_size = 16 + (count * 16); 
         
         auto* void_ptr_ty = llvm::PointerType::get(*context, 0);
         llvm::FunctionType* malloc_type = llvm::FunctionType::get(void_ptr_ty, {builder->getInt64Ty()}, false);
         llvm::Function* malloc_fn = llvm::cast<llvm::Function>(module->getOrInsertFunction("malloc", malloc_type).getCallee());
         llvm::Value* raw_mem = builder->CreateCall(malloc_fn, {builder->getInt64(alloc_size)}, "tbl_mem");
 
-        llvm::Value* count_ptr = builder->CreatePointerCast(raw_mem, builder->getInt64Ty()->getPointerTo());
+        llvm::Value* tag_ptr = builder->CreatePointerCast(raw_mem, builder->getInt64Ty()->getPointerTo());
+        builder->CreateStore(builder->getInt64(2), tag_ptr);
+
+        llvm::Value* count_ptr = builder->CreateConstGEP1_64(builder->getInt64Ty(), tag_ptr, 1);
         builder->CreateStore(builder->getInt64(count), count_ptr);
 
-        llvm::Value* entry_base = builder->CreateConstGEP1_64(builder->getInt64Ty(), count_ptr, 1);
+        llvm::Value* entry_base = builder->CreateConstGEP1_64(builder->getInt64Ty(), tag_ptr, 2);
         for (size_t i = 0; i < count; ++i) {
-            uint64_t key_hash = std::hash<std::string>{}(tbl_lit->entries[i].key);
+            llvm::Value* key_str_ptr = builder->CreateGlobalStringPtr(tbl_lit->entries[i].key);
             llvm::Value* val = codegen_expr(tbl_lit->entries[i].value.get());
 
             llvm::Value* val_bits = val->getType()->isFloatingPointTy() 
@@ -235,7 +244,7 @@ llvm::Value* CodeGenerator::codegen_expr(AST::Expr* expr) {
                 : (val->getType()->isPointerTy() ? builder->CreatePtrToInt(val, builder->getInt64Ty()) : builder->CreateIntCast(val, builder->getInt64Ty(), false));
 
             llvm::Value* key_slot = builder->CreateConstGEP1_64(builder->getInt64Ty(), entry_base, i * 2, "tbl_key_slot");
-            builder->CreateStore(builder->getInt64(key_hash), key_slot);
+            builder->CreateStore(builder->CreatePtrToInt(key_str_ptr, builder->getInt64Ty()), key_slot);
 
             llvm::Value* val_slot = builder->CreateConstGEP1_64(builder->getInt64Ty(), entry_base, (i * 2) + 1, "tbl_val_slot");
             builder->CreateStore(val_bits, val_slot);
@@ -248,7 +257,7 @@ llvm::Value* CodeGenerator::codegen_expr(AST::Expr* expr) {
         llvm::Value* index = codegen_expr(idx_expr->index.get());
 
         llvm::Value* cap_ptr = builder->CreatePointerCast(target, builder->getInt64Ty()->getPointerTo());
-        llvm::Value* data_base = builder->CreateConstGEP1_64(builder->getInt64Ty(), cap_ptr, 2);
+        llvm::Value* data_base = builder->CreateConstGEP1_64(builder->getInt64Ty(), cap_ptr, 3);
         
         llvm::Value* target_slot = builder->CreateGEP(builder->getInt64Ty(), data_base, index, "index_slot");
         return builder->CreateLoad(builder->getInt64Ty(), target_slot, "index_load");
@@ -281,32 +290,78 @@ llvm::Value* CodeGenerator::codegen_expr(AST::Expr* expr) {
         return val;
     }
 
-    if (auto bin = dynamic_cast<AST::BinaryExpr*>(expr)) {
+   if (auto bin = dynamic_cast<AST::BinaryExpr*>(expr)) {
         llvm::Value* l = codegen_expr(bin->left.get());
         llvm::Value* r = codegen_expr(bin->right.get());
         if (!l || !r) return nullptr;
 
-        const std::string& op = bin->op;
-        bool is_float = l->getType()->isFloatingPointTy() || r->getType()->isFloatingPointTy();
+        bool l_is_nullable = l->getType()->isStructTy();
+        bool r_is_nullable = r->getType()->isStructTy();
+        bool l_is_nullptr = dynamic_cast<AST::NullPtrExpr*>(bin->left.get()) != nullptr;
+        bool r_is_nullptr = dynamic_cast<AST::NullPtrExpr*>(bin->right.get()) != nullptr;
 
+        if ((l_is_nullable && r_is_nullptr) || (r_is_nullable && l_is_nullptr)) {
+            llvm::Value* nullable_val = l_is_nullable ? l : r;
+            llvm::Value* is_null = builder->CreateExtractValue(nullable_val, {0}, "get_is_null");
+            llvm::Value* cmp = builder->CreateICmpEQ(is_null, builder->getInt1(true), "is_null_cmp");
+            if (bin->op == "!=") {
+                cmp = builder->CreateNot(cmp, "is_not_null_cmp");
+            }
+            return cmp;
+        }
+
+        if (l_is_nullable && !r_is_nullable && !r_is_nullptr) {
+            l = builder->CreateExtractValue(l, {1}, "unwrap_l_nullable");
+        }
+        if (r_is_nullable && !l_is_nullable && !l_is_nullptr) {
+            r = builder->CreateExtractValue(r, {1}, "unwrap_r_nullable");
+        }
+
+        const std::string& op = bin->op;
+
+        if (l->getType()->isPointerTy() || r->getType()->isPointerTy()) {
+            if (l->getType() != r->getType()) {
+                if (l->getType()->isPointerTy() && r->getType()->isIntegerTy()) {
+                    r = builder->CreateIntToPtr(r, l->getType(), "r_to_ptr");
+                } else if (r->getType()->isPointerTy() && l->getType()->isIntegerTy()) {
+                    l = builder->CreateIntToPtr(l, r->getType(), "l_to_ptr");
+                }
+            }
+            if (op == "==") return builder->CreateICmpEQ(l, r, "ptr_eq");
+            if (op == "!=") return builder->CreateICmpNE(l, r, "ptr_ne");
+            throw std::runtime_error("Unsupported operator for pointer types: " + op);
+        }
+
+        bool is_float = l->getType()->isFloatingPointTy() || r->getType()->isFloatingPointTy();
         if (is_float) {
             if (l->getType()->isIntegerTy()) l = builder->CreateSIToFP(l, builder->getDoubleTy(), "l_cast_fp");
             if (r->getType()->isIntegerTy()) r = builder->CreateSIToFP(r, builder->getDoubleTy(), "r_cast_fp");
+        } else if (l->getType()->isIntegerTy() && r->getType()->isIntegerTy()) {
+            unsigned l_bits = l->getType()->getIntegerBitWidth();
+            unsigned r_bits = r->getType()->getIntegerBitWidth();
+            if (l_bits < r_bits) {
+                l = builder->CreateIntCast(l, r->getType(), true, "ext_l");
+            } else if (r_bits < l_bits) {
+                r = builder->CreateIntCast(r, l->getType(), true, "ext_r");
+            }
         }
 
         if (op == "+") return is_float ? builder->CreateFAdd(l, r, "faddtmp") : builder->CreateAdd(l, r, "addtmp");
         if (op == "-") return is_float ? builder->CreateFSub(l, r, "fsubtmp") : builder->CreateSub(l, r, "subtmp");
         if (op == "*") return is_float ? builder->CreateFMul(l, r, "fmultmp") : builder->CreateMul(l, r, "multmp");
         if (op == "/") return is_float ? builder->CreateFDiv(l, r, "fdivtmp") : builder->CreateSDiv(l, r, "idivtmp");
+        
         if (op == "==") return is_float ? builder->CreateFCmpOEQ(l, r, "feqtmp") : builder->CreateICmpEQ(l, r, "ieqtmp");
         if (op == "!=") return is_float ? builder->CreateFCmpONE(l, r, "fnetmp") : builder->CreateICmpNE(l, r, "inetmp");
-        if (op == "<") return is_float ? builder->CreateFCmpOLT(l, r, "flttmp") : builder->CreateICmpSLT(l, r, "ilttmp");
-        if (op == ">") return is_float ? builder->CreateFCmpOGT(l, r, "fgttmp") : builder->CreateICmpSGT(l, r, "igttmp");
+        if (op == "<")  return is_float ? builder->CreateFCmpOLT(l, r, "flttmp") : builder->CreateICmpSLT(l, r, "ilttmp");
+        if (op == ">")  return is_float ? builder->CreateFCmpOGT(l, r, "fgttmp") : builder->CreateICmpSGT(l, r, "igttmp");
+        if (op == "<=") return is_float ? builder->CreateFCmpOLE(l, r, "fletmp") : builder->CreateICmpSLE(l, r, "iletmp");
+        if (op == ">=") return is_float ? builder->CreateFCmpOGE(l, r, "fgetmp") : builder->CreateICmpSGE(l, r, "igetmp");
 
         throw std::runtime_error("Unsupported binary operator: " + op);
     }
     if (auto call = dynamic_cast<AST::CallExpr*>(expr)) {
-        if (call->module.empty() && (call->method == "__print__" || call->method == "io_write" || call->method == "write")) {
+        if ((call->module.empty() || call->module == "io") && (call->method == "__print__" || call->method == "io_write" || call->method == "write")) {
             if (call->arguments.empty()) return nullptr;
             llvm::Value* val = codegen_expr(call->arguments[0].get());
             
@@ -331,8 +386,14 @@ llvm::Value* CodeGenerator::codegen_expr(AST::Expr* expr) {
 
             const auto& param_tys = callee->getFunctionType()->params();
             for (size_t i = 0; i < args.size() && i < param_tys.size(); ++i) {
-                if (args[i]->getType()->isStructTy() && param_tys[i]->isFloatingPointTy()) {
-                    args[i] = builder->CreateExtractValue(args[i], {1}, "unwrap_nullable_val");
+                if (args[i]->getType() != param_tys[i]) {
+                    if (args[i]->getType()->isIntegerTy() && param_tys[i]->isFloatingPointTy()) {
+                        args[i] = builder->CreateSIToFP(args[i], param_tys[i], "arg_sitofp");
+                    } else if (args[i]->getType()->isFloatingPointTy() && param_tys[i]->isIntegerTy()) {
+                        args[i] = builder->CreateFPToSI(args[i], param_tys[i], "arg_fptosi");
+                    } else if (args[i]->getType()->isStructTy() && param_tys[i]->isFloatingPointTy()) {
+                        args[i] = builder->CreateExtractValue(args[i], {1}, "unwrap_nullable_val");
+                    }
                 }
             }
 
@@ -353,16 +414,27 @@ void CodeGenerator::codegen_stmt(AST::Node* stmt_node, llvm::Type* ret_type_llvm
             builder->CreateRetVoid();
         }
         has_terminator = true;
+    } else if (auto break_stmt = dynamic_cast<AST::BreakStmt*>(stmt_node)) {
+        if (loop_exit_stack.empty()) {
+            throw std::runtime_error("Break statement used outside of a loop.");
+        }
+        builder->CreateBr(loop_exit_stack.back());
+        has_terminator = true;
     } else if (auto expr = dynamic_cast<AST::Expr*>(stmt_node)) {
         codegen_expr(expr);
     } else if (auto decl = dynamic_cast<AST::VarDecl*>(stmt_node)) {
         llvm::Value* init_val = decl->initializer ? codegen_expr(decl->initializer.get()) : nullptr;
         
+        bool is_container_lit = decl->initializer && (
+            dynamic_cast<AST::TableLiteralExpr*>(decl->initializer.get()) || 
+            dynamic_cast<AST::ArrayLiteralExpr*>(decl->initializer.get())
+        );
+
         llvm::Type* llvm_type = nullptr;
-        if (!decl->type.empty() && decl->type != "auto") {
+        if (!decl->type.empty() && decl->type != "auto" && !is_container_lit) {
             llvm_type = get_llvm_type(decl->type);
         } else if (init_val) {
-            llvm_type = init_val->getType();
+            llvm_type = is_container_lit ? llvm::PointerType::get(*context, 0) : init_val->getType();
         } else {
             llvm_type = builder->getInt64Ty();
         }
@@ -372,6 +444,122 @@ void CodeGenerator::codegen_stmt(AST::Node* stmt_node, llvm::Type* ret_type_llvm
             builder->CreateStore(init_val, alloca);
         }
         named_values[decl->name] = alloca;
+    } else if (auto while_stmt = dynamic_cast<AST::WhileStmt*>(stmt_node)) {
+        llvm::Function* parent_fn = builder->GetInsertBlock()->getParent();
+        llvm::BasicBlock* cond_bb = llvm::BasicBlock::Create(*context, "while.cond", parent_fn);
+        llvm::BasicBlock* body_bb = llvm::BasicBlock::Create(*context, "while.body", parent_fn);
+        llvm::BasicBlock* merge_bb = llvm::BasicBlock::Create(*context, "while.end", parent_fn);
+
+        builder->CreateBr(cond_bb);
+        builder->SetInsertPoint(cond_bb);
+
+        llvm::Value* cond_val = codegen_expr(while_stmt->condition.get());
+        if (!cond_val->getType()->isIntegerTy(1)) {
+            cond_val = builder->CreateICmpNE(cond_val, builder->getInt64(0), "to_bool");
+        }
+        builder->CreateCondBr(cond_val, body_bb, merge_bb);
+
+        builder->SetInsertPoint(body_bb);
+        loop_exit_stack.push_back(merge_bb);
+        bool body_terminator = false;
+        for (const auto& body_node : while_stmt->body) {
+            codegen_stmt(body_node.get(), ret_type_llvm, body_terminator);
+            if (body_terminator) break;
+        }
+        loop_exit_stack.pop_back();
+        
+        if (!body_terminator) {
+            builder->CreateBr(cond_bb);
+        }
+
+        builder->SetInsertPoint(merge_bb);
+    } else if (auto num_for = dynamic_cast<AST::ForNumericStmt*>(stmt_node)) {
+        llvm::Value* start_val = codegen_expr(num_for->start.get());
+        llvm::Type* var_ty = start_val->getType();
+        llvm::AllocaInst* alloca = builder->CreateAlloca(var_ty, nullptr, num_for->var_name);
+        builder->CreateStore(start_val, alloca);
+        named_values[num_for->var_name] = alloca;
+
+        llvm::Function* parent_fn = builder->GetInsertBlock()->getParent();
+        llvm::BasicBlock* cond_bb = llvm::BasicBlock::Create(*context, "for.cond", parent_fn);
+        llvm::BasicBlock* body_bb = llvm::BasicBlock::Create(*context, "for.body", parent_fn);
+        llvm::BasicBlock* update_bb = llvm::BasicBlock::Create(*context, "for.update", parent_fn);
+        llvm::BasicBlock* merge_bb = llvm::BasicBlock::Create(*context, "for.end", parent_fn);
+
+        builder->CreateBr(cond_bb);
+        builder->SetInsertPoint(cond_bb);
+
+        llvm::Value* current_val = builder->CreateLoad(var_ty, alloca, num_for->var_name);
+        llvm::Value* end_val = codegen_expr(num_for->end.get());
+        llvm::Value* cond = builder->CreateICmpSLE(current_val, end_val, "loop_cond");
+        builder->CreateCondBr(cond, body_bb, merge_bb);
+
+        builder->SetInsertPoint(body_bb);
+        loop_exit_stack.push_back(merge_bb);
+        bool body_term = false;
+        for (const auto& body_node : num_for->body) {
+            codegen_stmt(body_node.get(), ret_type_llvm, body_term);
+            if (body_term) break;
+        }
+        loop_exit_stack.pop_back();
+
+        if (!body_term) builder->CreateBr(update_bb);
+
+        builder->SetInsertPoint(update_bb);
+        llvm::Value* step_val = num_for->step ? codegen_expr(num_for->step.get()) : llvm::ConstantInt::get(var_ty, 1);
+        llvm::Value* next_val = builder->CreateAdd(current_val, step_val, "step_add");
+        builder->CreateStore(next_val, alloca);
+        builder->CreateBr(cond_bb);
+
+        builder->SetInsertPoint(merge_bb);
+    } 
+    else if (auto in_for = dynamic_cast<AST::ForInStmt*>(stmt_node)) {
+        llvm::Value* target = codegen_expr(in_for->iterable.get());
+        llvm::Value* cap_ptr = builder->CreatePointerCast(target, builder->getInt64Ty()->getPointerTo());
+        llvm::Value* len_ptr = builder->CreateConstGEP1_64(builder->getInt64Ty(), cap_ptr, 2);
+        llvm::Value* length = builder->CreateLoad(builder->getInt64Ty(), len_ptr, "arr_len");
+        llvm::Value* data_base = builder->CreateConstGEP1_64(builder->getInt64Ty(), cap_ptr, 3);
+
+        llvm::AllocaInst* idx_alloca = builder->CreateAlloca(builder->getInt64Ty(), nullptr, "iter_idx");
+        builder->CreateStore(builder->getInt64(0), idx_alloca);
+
+        llvm::AllocaInst* val_alloca = builder->CreateAlloca(builder->getInt64Ty(), nullptr, in_for->var_name);
+        named_values[in_for->var_name] = val_alloca;
+
+        llvm::Function* parent_fn = builder->GetInsertBlock()->getParent();
+        llvm::BasicBlock* cond_bb = llvm::BasicBlock::Create(*context, "in.cond", parent_fn);
+        llvm::BasicBlock* body_bb = llvm::BasicBlock::Create(*context, "in.body", parent_fn);
+        llvm::BasicBlock* update_bb = llvm::BasicBlock::Create(*context, "in.update", parent_fn);
+        llvm::BasicBlock* merge_bb = llvm::BasicBlock::Create(*context, "in.end", parent_fn);
+
+        builder->CreateBr(cond_bb);
+        builder->SetInsertPoint(cond_bb);
+
+        llvm::Value* idx_val = builder->CreateLoad(builder->getInt64Ty(), idx_alloca, "curr_idx");
+        llvm::Value* cond = builder->CreateICmpSLT(idx_val, length, "iter_cond");
+        builder->CreateCondBr(cond, body_bb, merge_bb);
+
+        builder->SetInsertPoint(body_bb);
+        llvm::Value* slot = builder->CreateGEP(builder->getInt64Ty(), data_base, idx_val, "iter_slot");
+        llvm::Value* elem_val = builder->CreateLoad(builder->getInt64Ty(), slot, "iter_elem");
+        builder->CreateStore(elem_val, val_alloca);
+
+        loop_exit_stack.push_back(merge_bb);
+        bool body_term = false;
+        for (const auto& body_node : in_for->body) {
+            codegen_stmt(body_node.get(), ret_type_llvm, body_term);
+            if (body_term) break;
+        }
+        loop_exit_stack.pop_back();
+
+        if (!body_term) builder->CreateBr(update_bb);
+
+        builder->SetInsertPoint(update_bb);
+        llvm::Value* next_idx = builder->CreateAdd(idx_val, builder->getInt64(1), "next_idx");
+        builder->CreateStore(next_idx, idx_alloca);
+        builder->CreateBr(cond_bb);
+
+        builder->SetInsertPoint(merge_bb);
     }
 }
 
@@ -396,6 +584,7 @@ void CodeGenerator::compile(AST::Program* program) {
 
             builder->SetInsertPoint(llvm::BasicBlock::Create(*context, "entry", function));
             named_values.clear();
+            loop_exit_stack.clear();
             for (auto& arg : function->args()) {
                 llvm::AllocaInst* alloca = builder->CreateAlloca(arg.getType(), nullptr, arg.getName());
                 builder->CreateStore(&arg, alloca);
@@ -434,8 +623,8 @@ void CodeGenerator::exec(const std::vector<std::string>& raw_args) {
     struct sigaction sa;
     std::memset(&sa, 0, sizeof(struct sigaction));
     sa.sa_flags = SA_SIGINFO;
-    sa.sa_sigaction = yuri_sigsegv_handler;
-    sigaction(SIGSEGV, &sa, NULL);
+    sa.sa_sigaction = sigsegv_handler;
+    sigaction(SIGSEGV, &sa, nullptr);
 
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();

@@ -17,6 +17,10 @@ struct Expr : public Node {
 
 struct NullPtrExpr : public Expr {};
 
+struct BoolLiteralExpr : public Expr {
+    bool value;
+};
+
 struct Stmt : public Node {
     virtual ~Stmt() = default;
 };
@@ -27,10 +31,48 @@ struct IfStmt : public Stmt {
     std::vector<std::unique_ptr<Node>> else_branch;
 };
 
+struct BreakStmt : public Stmt {};
+
+struct ForNumericStmt : public Stmt {
+    std::string var_name;
+    std::unique_ptr<Expr> start;
+    std::unique_ptr<Expr> end;
+    std::unique_ptr<Expr> step; // Optional, defaults to 1
+    std::vector<std::unique_ptr<Node>> body;
+};
+
+struct ForInStmt : public Stmt {
+    std::string var_name;
+    std::unique_ptr<Expr> iterable;
+    std::vector<std::unique_ptr<Node>> body;
+};
+    
+struct WhileStmt : public Stmt {
+    std::unique_ptr<Expr> condition;
+    std::vector<std::unique_ptr<Node>> body;
+};
+
 struct Program : public Node {
     std::string module_name;
     std::string entry_function;
     std::vector<std::unique_ptr<Node>> statements;
+};
+
+struct TypeDecl : public Expr {
+    std::string name;
+};
+
+struct TypeAliasDecl : public TypeDecl {
+    std::string target_type;
+};
+
+struct StructField {
+    std::string name;
+    std::string type_str;
+};
+
+struct StructTypeDecl : public TypeDecl {
+    std::vector<StructField> fields;
 };
 
 struct Function : public Stmt {
