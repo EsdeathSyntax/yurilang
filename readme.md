@@ -40,3 +40,4 @@ Distributed under the MIT License.
 ## Notes/Disclaimers/Links
  - Full documentation to be added
  - Generative AI was involved in this project.
+ - Support [discord](https://discord.gg/EVuaM4BBux)
