@@ -17,7 +17,7 @@ struct TableEntry {
 struct TableHeader {
     int64_t tag;
     int64_t count;
-    TableEntry entries[1]; // flexible array member
+    TableEntry entries[1];
 };
 
 enum class ValueType : uint8_t {

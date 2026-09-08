@@ -29,53 +29,13 @@
 #include "llvm/Linker/Linker.h"
 #include "llvm/Support/Error.h"
 
-void sigsegv_handler(int sig, siginfo_t* info, void* context) {
-    std::cerr << "\n[CRITICAL ERROR] Segmentation fault (SIGSEGV) intercepted by runtime.\n";
-    std::cerr << "Faulting memory address: " << info->si_addr << "\n";
-
-    void* faulting_ip = nullptr;
-    auto* uc = static_cast<ucontext_t*>(context);
-    #if defined(__x86_64__)
-    faulting_ip = reinterpret_cast<void*>(uc->uc_mcontext.gregs[REG_RIP]);
-    #elif defined(__aarch64__)
-    faulting_ip = reinterpret_cast<void*>(uc->uc_mcontext.pc);
-    #endif
-
-    std::cerr << "Faulting Instruction Pointer (RIP): " << faulting_ip << "\n\n";
-
-    void* trace_stack[32];
-    int trace_size = backtrace(trace_stack, 32);
-
-    std::cerr << "Execution Backtrace:\n";
-    char exe_path[1024];
-    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
-    if (len != -1) {
-        exe_path[len] = '\0';
-        for (int i = 0; i < trace_size; ++i) {
-            char cmd[256];
-            std::snprintf(cmd, sizeof(cmd), "addr2line -e %s -f -p %p", exe_path, trace_stack[i]);
-            FILE* pipe = popen(cmd, "r");
-            if (pipe) {
-                char buffer[256];
-                if (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-                    std::cerr << "  #" << i << " " << buffer;
-                }
-                pclose(pipe);
-            }
-        }
-    } else {
-        backtrace_symbols_fd(trace_stack, trace_size, STDERR_FILENO);
-    }
-
-    std::_Exit(1);
-}
 
 namespace Yuri {
 
-struct NullableFloatABI {
-    bool is_null;
-    double val;
-};
+struct NullableValue {
+    uint8_t is_null;
+    uint64_t bits;
+}
 
 llvm::Function* CodeGenerator::get_or_resolve_function(AST::CallExpr* call, const std::vector<llvm::Value*>& args) {
     std::string symbol_name = call->method;
@@ -101,7 +61,7 @@ llvm::Function* CodeGenerator::get_or_resolve_function(AST::CallExpr* call, cons
             param_types.push_back(get_llvm_type(p_str));
         }
     } else {
-        throw std::runtime_error("Critical Error: Missing native function signature in Registry for symbol: " + symbol_name);
+        throw std::runtime_error("Missing native function signature in Registry for symbol: " + symbol_name);
     }
 
     auto* fn_type = llvm::FunctionType::get(ret_type, param_types, false);
@@ -620,11 +580,6 @@ ffi_type* CodeGenerator::get_ffi_type(const std::string& type_str) {
 }
 
 void CodeGenerator::exec(const std::vector<std::string>& raw_args) {
-    struct sigaction sa;
-    std::memset(&sa, 0, sizeof(struct sigaction));
-    sa.sa_flags = SA_SIGINFO;
-    sa.sa_sigaction = sigsegv_handler;
-    sigaction(SIGSEGV, &sa, nullptr);
 
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
@@ -673,30 +628,22 @@ void CodeGenerator::exec(const std::vector<std::string>& raw_args) {
         throw std::runtime_error("Resolved entry symbol '" + target_entry_function + "' evaluated to a null address.");
     }
 
-    if (entry_returns_void) {
-        if (entry_param_count == 1 && entry_param_types[0] == "float?") {
-            using EntryFunc1 = void(*)(NullableFloatABI);
-            auto entry_fn = reinterpret_cast<EntryFunc1>(fn_ptr);
-            NullableFloatABI default_x{true, 0.0};
-            entry_fn(default_x);
-        } else {
-            using EntryFuncVoid = void(*)();
-            auto entry_fn = reinterpret_cast<EntryFuncVoid>(fn_ptr);
-            entry_fn();
-        }
+    auto result;
+
+    if (entry_param_count == 1 && entry_param_types[0].back() == '?') {
+        using EntryFunc = void(*)(NullableValue);
+        auto entry_fn = reinterpret_cast<EntryFunc>(fn_ptr);
+            
+        NullableValue default_arg{1, 0}; 
+        result = entry_returns_void ? nullptr : entry_fn(default_arg);
     } else {
-        if (entry_param_count == 1 && entry_param_types[0] == "float?") {
-            using EntryFunc1 = int64_t(*)(NullableFloatABI);
-            auto entry_fn = reinterpret_cast<EntryFunc1>(fn_ptr);
-            NullableFloatABI default_x{true, 0.0};
-            int64_t result = entry_fn(default_x);
-            std::cout << "Program returned: " << result << "\n";
-        } else {
-            using EntryFuncVal = int64_t(*)();
-            auto entry_fn = reinterpret_cast<EntryFuncVal>(fn_ptr);
-            int64_t result = entry_fn();
-            std::cout << "Program returned: " << result << "\n";
-        }
+        using EntryFuncVoid = void(*)();
+        auto entry_fn = reinterpret_cast<EntryFuncVoid>(fn_ptr);
+        result = entry_returns_void ? nullptr : entry_fn();
+    }
+
+    if (result != nullptr) {
+        std::cout << "Programmed exited with code " << result << "\n";
     }
 }
 
