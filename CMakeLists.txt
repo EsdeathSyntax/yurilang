@@ -1,13 +1,12 @@
 cmake_minimum_required(VERSION 3.15)
-project(YuriLang C CXX) # <-- FIX 1: Enable both C and CXX to satisfy LLVM's internal checks
+project(YuriLang C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_VISIBILITY_PRESET default)
 set(CMAKE_VISIBILITY_INLINES_HIDDEN OFF)
 
-# Find dependency packages required by LLVM exports
-find_package(Terminfo QUIET) # <-- FIX 2: Explicitly find Terminfo so LLVMSupport links correctly
+find_package(Terminfo QUIET)
 
 find_package(LLVM REQUIRED CONFIG)
 include_directories(${LLVM_INCLUDE_DIRS})
@@ -28,16 +27,12 @@ file(GLOB_RECURSE PROJ_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/std/*.cc"
 )
 
-# 1. Create the executable target FIRST before modifying properties
 add_executable(yurilang ${PROJ_SOURCES} ${PROJ_HEADERS})
 
-# 2. Now set target properties safely
 set_target_properties(yurilang PROPERTIES ENABLE_EXPORTS ON)
 
-# 3. Include header directories
 target_include_directories(yurilang PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
-# 4. Link required LLVM components
 llvm_map_components_to_libnames(llvm_libs core support jitlink native orcjit passes)
 target_link_libraries(yurilang PRIVATE
     ${llvm_libs}
